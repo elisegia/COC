@@ -1,0 +1,1528 @@
+---
+title: "Network Analysis and Visualization"
+author: "Gia Elise Barboza"
+date: "August 8, 2020"
+output: html_document
+---
+
+## Install Required Libraries
+Step 1 is always to make sure the packages needed are installed.
+The code below uses several packages that you will need to install in order to follow along:
+* igraph
+* network
+* sna
+
+Other packages will be mentioned along the way, as necessary.
+
+```{r warning=FALSE}
+#install.packages("igraph") 
+#install.packages("network") 
+#install.packages("sna")
+#install.packages("ggraph")
+#install.packages("visNetwork")
+#install.packages("threejs")
+#install.packages("networkD3")
+#install.packages("ndtv")
+```
+
+## Brief introduction to the color palette
+
+Colors are important for SNA and for map making. Different strategies apply to each type of visual analysis.
+
+```{r colors}
+#Colors in R plots
+#install.packages('RColorBrewer')
+library('RColorBrewer')
+display.brewer.all()
+display.brewer.pal(8, "Set3")
+display.brewer.pal(8, "Spectral")
+display.brewer.pal(8, "Blues")
+```
+
+## Network layouts
+Network layouts are simply algorithms that return coordinates for each node in a network.Each layout returns a different algorithm.
+
+Below you will find a list of possible layouts we can use with igraph. We are going to stick with the most common layout, called Fruchterman-Reingold, but depending on the results/research question, you might want to explore alternative layouts as they may fit the analysis better.
+[Click here](http://melissaclarkson.com/resources/R_guides/documents/gplot_layout_Ver1.pdf) for an awesome guide to layouts using the sna package.
+
+```{r , echo=FALSE, message=FALSE, warning = FALSE}
+library("igraph")
+nodes <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset1-UCCS-NODES.csv", header=T, as.is=T)
+links <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset1-UCCS-Example-EDGES.csv", header=T, as.is=T)
+layouts <- grep("^layout_", ls("package:igraph"), value=TRUE)[-1] 
+# Remove layouts that do not apply to our graph.
+layouts <- layouts[!grepl("bipartite|merge|norm|sugiyama|tree", layouts)]
+net <- graph_from_data_frame(d=links, vertices=nodes, directed=T) 
+
+par(mfrow=c(5,3), mar=c(1,1,1,1))
+for (layout in layouts) {
+  print(layout)
+  l <- do.call(layout, list(net)) 
+  plot(net, edge.arrow.mode=0, layout=l, main=layout) }
+```
+
+## Data format, size, and preparation
+
+To begin, we will work with a data set containing information about (1) UCCS employees and (2) their connections with students. One involves a network of contacts -- number and types of contacts (person and vitural) contacts -- between different categories of UCCS employees. The second is a network of links between the employees and UCCS students.
+
+The ideas behind the visualizations will apply to any dataset. However, certain visual properties such as the attributes of nodes are impossible to distinguish in larger graph maps. In fact, when drawing very big networks you may want to hide the network edges, and focus on identifying and visualizing communities of nodes, conduct multimodal analyses (like facets we saw before using ggplot) or provide charts that show key characteristics of the network graph.
+
+Note: there is a component of SNA that uses the API of various websites/apps (e.g. Twitter).
+
+### Examining Dataset 1: The edgelist
+The first data set we are going to work with consists of two files, "Dataset1-UCCS-Example-NODES.csv" and "Dataset1-UCCS-Example-EDGES.csv" 
+
+Load the data below. The data are stored in the "node" and "links" object (Note: these are used for clarity, you can name these objects anything).
+
+```{r open_dat}
+nodes <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset1-UCCS-NODES.csv", header=T, as.is=T)
+links <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset1-UCCS-Example-EDGES.csv", header=T, as.is=T)
+
+```
+
+Examine the data below and make sure it loaded properly into RStudio. Click on the nodes dataset and the links dataset and examine the structure.
+
+```{r examine_dat}
+head(nodes)
+head(links)
+```
+
+### Creating an igraph object
+Next we will convert the raw data to an igraph network object. This means formatting the data that R can work with. 
+
+To do that, we will use the graph_from_data_frame() function, which takes two data frames as arguments: d and vertices.
+
+* d describes the edges (also called links or ties) of the network. Its first two columns are the IDs of the "source" and the "target" node for each edge. The columns that follow are edge attributes (weight, type, label, or anything else).
+* vertices starts with a column of node IDs. Any following columns are interpreted as node attributes.
+
+First, make sure to install the igraph library, then invoke the library by typing:
+
+```{r warning =FALSE}
+library("igraph")
+```
+
+To create the graph object type:
+
+```{r}
+net <- graph_from_data_frame(d=links, vertices=nodes, directed=T) 
+net
+```
+
+The description of an igraph object starts with four letters:
+
+* D or U, for a directed or undirected graph
+* N for a named graph (where nodes have a name attribute)
+* W for a weighted graph (where edges have a weight attribute)
+* B for a bipartite (two-mode) graph (where nodes have a type attribute)
+
+The two numbers that follow (17, 49) refer to the number of nodes and edges in the graph. The description also lists node & edge attributes, for example:
+
+* (g/c) - graph-level character attribute
+* (v/c) - vertex-level character attribute
+* (e/n) - edge-level numeric attribute
+
+Let's descibe the type of graph we have here.
+
+We can also access nodes, edges, and their attributes by typing:
+
+```{r}
+E(net)       # The edges of the "net" object
+V(net)       # The vertices of the "net" object
+E(net)$type  # Edge attribute "type"
+V(net)$name  # Vertex attribute "name"
+
+# Find nodes and edges by attribute:
+# (that returns objects of type vertex sequence/edge sequence)
+V(net)[name=="Anna"]
+E(net)[type=="virtual"]
+
+# You can also examine the network matrix directly:
+net[,]
+net[1,]
+net[5,7]
+```
+
+Question: What does the code E(net)[type=="virtual"] tell us?
+
+Question: How would we access the cell in row 6 column 9?
+
+Question: What about row 40, column 3?
+
+It is also easy to extract an edge list or matrix back from the igraph network:
+
+```{r}
+# Get an edge list or a matrix:
+as_edgelist(net, names=T)
+as_adjacency_matrix(net, attr="weight")
+
+# Or data frames describing nodes and edges:
+as_data_frame(net, what="edges")
+as_data_frame(net, what="vertices")
+```
+
+```{r}
+plot(net) # most basic plot of the network
+```
+
+Question: What types of structures/properties are evident from this graph?
+
+Notice that Katy has "nominated" herself, meaning in this instance that she communicates or collaborates with herself. 
+This information may or may not be useful given the research question. 
+Either way,  we are going to remove duplicates and self-nominations as follows:
+
+```{r}
+net <- simplify(net, remove.multiple = F, remove.loops = T) 
+```
+
+Let's and reduce the arrow size and remove the labels (we do that by setting them to NA):
+
+```{r}
+plot(net, edge.arrow.size=.4,vertex.label=NA)
+```
+
+
+### Plotting networks with igraph
+![](parameters.png)
+
+You may have noticed that you can tweak the parameters for clarity, consistency, etc.
+
+Exercise: Let's change the edges of the above network graph by making them blue.
+
+Below, I plot the graph using curved edges (edge.curved=.1) and reduce arrow size a bit. 
+
+```{r}
+plot(net, edge.arrow.size=.25, edge.curved=.1)
+```
+
+Note that using curved edges will allow you to see multiple links between two nodes (e.g. links going in either direction, or multiplex links)
+
+Let's change the edge color to red, the node & border color to orange and replace the vertex label with the node names stored in variable "name" in the nodes data set.
+
+Notice you can use the code or the color name.
+
+```{r}
+plot(net, edge.arrow.size=.2, edge.color="red",
+     vertex.color="orange", vertex.frame.color="#ffffff",
+     vertex.label=V(net)$name, vertex.label.color="navy") 
+```
+
+The second way to set attributes is to add them to the igraph object. 
+
+Let's color our network nodes based on type of professor, and size them based on the number of years worked (more years worked -> larger node). 
+
+We will also change the width of the edges based on the variable "weight."
+
+In this case, I know there are three types of people in my network, I have professors, instructors and staff. 
+
+Recap, the 
+
+* size of the node (vertex) represents the scaled value of years worked for that person
+* the color of the node represents the type of employee
+* each node is labeled with the attribute "name"
+* the width of the edge represents the variable "weight" (number of contacts)
+
+Who's Zooming Who?
+
+```{r}
+# Generate colors based on professor type:
+colrs <- c("green", "yellow", "red")
+
+#This assigns green to professor, yellow to instructor and red to staff
+V(net)$color <- colrs[V(net)$level.type] #Note: this variable must be numeric
+
+#If you just wanted to visualize professors versus everyone else use:
+#V(net)$color <- ifelse(nodes[V(net), 4] == "Professor", "blue", "red")
+
+# We could also use the years worked value:
+V(net)$size <- (V(net)$years.worked*10)/18
+
+# The labels are currently node IDs.
+# Setting them to NA will render no labels:
+V(net)$label <- V(net)$name
+
+# Set edge width based on weight:
+E(net)$width <- E(net)$weight/7
+
+#change arrow size and edge color:
+E(net)$arrow.size <- .2
+E(net)$edge.color <- "gray80"
+
+# We can even set the network layout:
+#graph_attr(net, "layout") <- layout_with_lgl
+graph_attr(net, "layout") <- layout_with_fr #keeps related vertices "close"
+plot(net) 
+```
+```{r}
+plot(net) 
+legend(x=-1.5, y=-1.1, c("Profesor","Instructor", "Staff"), pch=21,
+       col="#777777", pt.bg=colrs, pt.cex=2, cex=.8, bty="n", ncol=3)
+```
+
+Question: What do we learn about UCCS employes from this graph?
+
+* Instructors, professors seem to hang out with themselves (clusters, colors)
+* Henriikka has higher in group ties than anyone else (size of node)
+* The groups seem to communicate more with themselves than with other groups (size of lines)
+* From a structural perspective, if we wanted to ensure that professsors found out about a change in course scheduling, who would you target?
+
+```{r}
+plot(net, edge.color="orange", vertex.color="gray50") 
+
+```
+
+
+
+```{r}
+plot(net, vertex.shape="none", vertex.label=V(net)$name, 
+     vertex.label.font=2, vertex.label.color="gray40",
+     vertex.label.cex=.7, edge.color="gray85")
+```
+
+## Network measures
+
+### Descriptive statistics
+
+```{r}
+hist(links$weight)
+mean(links$weight)
+sd(links$weight)
+```
+
+## Network Density
+Density is defined as the number of connected ties divided by total possible ties. It's the number of ties that are connected out of all possible ties.
+
+It addressed the question: How connected is this network? (Higher density where the costs of maintaining the tie are low, ~> .2)
+
+Most social networks are not uniformly connected but rather contain pockets of high density clusters can be identified.
+
+Here, a higher density network is a more connected network
+
+```{r}
+graph.density(net,loop=FALSE)
+```
+
+### Average path length 
+The average path length is the average number of steps in the shortest paths necessary to navigate the network.
+
+Average path length gives us a sense of how efficiently the flow of information is through the network
+-- has correlation with density (less dense = more hops to get to any one person (node), on average)
+
+To calculate the average number of hops to get to any node:
+
+```{r}
+mean_distance(net)
+```
+
+Intuitively, this means I can get to anyone in the network in an average of 2.74 ties.
+
+Note: don't look at any one measure, but rather look at the measures collectively to tell the story. For example, we may think that decreasing the mean path length may provide a more efficient information flow, but to gauge efficiency we would want to compare the average path length with the network density coefficient. This is because if the density remains constant but the average path legnth decreases, the network has a very small number of highly connected nodes. It doesn't necessarily mean connections are happening in other parts of the network.
+
+
+### Transitivity
+Assume that I am friends with Anna, and Anna has a friend
+
+If a network is highly transitive, then since I am friends with Anna, I am also friends with that third friend
+
+Transitivity can give an idea about potential underlying mechanisms in the network
+Gangs have high transitivity
+There may be a social mechanism enforcing the transitivity we observe
+-- One question may be whether the clusters have a unique impact on an outcome variable
+
+Closely related to transitivity is clustering. A cluster is defined as the proportion of closed triads over over all triads in the network (open and closed). 
+
+Clustering measures the extent to which a group of nodes are more connected to each other than to others.  
+
+A highly clustered network may be indicative of bottelnecks where "stuff" is kept within cluster members or from other clusters. Clusters can indicate "group think". 
+
+Community detection methods can identify clusters in a network.
+
+```{r}
+ transitivity(net)
+```
+
+Community detection (to identify clustering) is used to mark densely connected nodes. Within the group there are dense connections and between the groups there are sparser connections.
+
+```{r}
+
+# Community detection
+cnet <- cluster_edge_betweenness(net)
+
+# Community detection returns an object of class "communities" which can be plotted: 
+class(cnet)
+
+plot(cnet,
+     net,
+     vertex.size = 10,
+     vertex.label.cex = 0.8)
+
+```
+
+You can look at the actual values being clustered by typing this:
+
+```{r}
+edge_betweenness(net, directed=T, weights=NA)
+```
+
+In any given case, another visualzation may work better. Below we create a hierarchical dendogram of scores to show relationships in a different way:
+
+```{r}
+dendPlot(cnet, mode="hclust")
+```
+
+Each "box" represents the individuals in a densely connected group.(Sorry Anna!)
+
+```{r}
+#ratio of number of edges to number of possibilities
+edge_density(net, loops = F)
+ecount(net)/(vcount(net)*(vcount(net)-1))
+```
+Positional features tell us who are the important players in the network.
+
+### Degree distribution
+
+A nodes' degree centrality refers to the number of ties it has
+
+The degree is the number of connections any node has. 
+
+The metrics associated with "degree" addresse the question of: Are high (low) connected people unique in some way or 'at risk' in some way.
+
+There are two types of degree:
+
+* A node's in-degree centrality refers to the number of links it receives
+* A node's in-degree centrality refers to the number of links it sends out
+
+```{r}
+degree(net, mode='all') #number of connections (note: in + out = all)
+degree(net, mode='in') #how many arrows are coming into a vertex (e.g. Jon)
+degree(net, mode='out')
+```
+
+```{r}
+library(ggplot2)
+
+# Plot the degree distribution for our network
+deg.dist <- degree_distribution(net, cumulative=F, mode="all")
+
+netw_degree <- as.data.frame(deg.dist)
+    
+qplot(deg.dist, data=netw_degree, geom="histogram", binwidth=.05, 
+      xlab="Degree", ylab="Probability Density")
+
+deg.dist <- degree_distribution(net, cumulative=T, mode="all")
+   
+
+plot(x=0:max(degree(net)), y=1-deg.dist, pch=19, cex=1.2, col="orange", 
+      xlab="Degree", ylab="Cumulative Frequency")
+```
+
+Question: What is the difference between these plots?
+
+Distibution of nodes
+
+```{r}
+# Histogram of node degree
+V(net)$label <- V(net)$name
+V(net)$degree <- degree(net)
+hist(V(net)$degree,
+     col = 'green',
+     main = 'Histogram of Node Degree',
+     ylab = 'Frequency',
+     xlab = 'Degree of Vertices')
+```
+Closeness centrality measures how quickly an entity can access more entities in a network. An entity or person with a high closeness centrality generally has quick access to other entities in a network.
+
+Betweenness centrality identifies an entity's position within a network in terms of its ability to make connections to other pairs or groups in a network. An entity or person with high betweenness centraltiy has a greater amount of influence over what happens in a network.
+
+```{r}
+reciprocity(net) # are people sending out ties also getting them?
+
+closeness(net, mode="all", weights = NA) # how close any one node is to anyone else
+#can change mode to "in" (how close are you to people sending you ties) or "out"
+
+betweenness(net, directed = T, weights = NA)
+```
+
+Question: Who has quicker access to other colleagues in the network?
+
+Question: Who has relatively more influence over their colleagues?
+
+Question: Is there a high degree of mutual relationships in this network?
+
+Here we have a loosely connected network not a core periphery one so that's why the closeness scores are not highly variable. This may mean nobody can uniquely diffuse information in this network, for example.
+
+We can plot these measures onto our graph as attributes as below.
+
+```{r}
+#Layout Options
+set.seed(3952)  # set seed to make the layout reproducible
+layout1 <- layout.fruchterman.reingold(net,niter=500)
+
+#Node or Vetex Options: Size and Color
+V(net)$size=betweenness(net)/5 
+#because we have wide range, I am dividing by 5 to keep the high degree nodes from overshadowing everything else.
+V(net)$color <- ifelse(nodes[V(net), 4] == "Professor", "green", "yellow")
+
+#Edge Options: Color
+E(net)$color <- "grey"
+
+#Plotting, Now Specifying an arrow size and getting rid of arrow heads
+#We are letting the color and the size of the node indicate the directed nature of the graph
+plot(net, edge.arrow.size=.45)
+```
+
+Clearly Henriikka has the highest betweeness centrality here.
+
+Here we keep links that have weight higher than the mean for the network. In igraph, we can delete edges using delete_edges(net, edges):
+
+```{r}
+cut.off <- mean(links$weight) 
+net.sp <- delete_edges(net, E(net)[weight<cut.off])
+plot(net.sp, vertex.label=V(net)$name, layout=layout_with_kk) 
+```
+
+## Highlighting specific nodes or links
+Sometimes we want to focus the visualization on a particular node or a group of nodes. In this example, we can examine the spread of information from focal actors. For instance, let's represent distance from Anna to Gia
+
+The distances function returns a matrix of shortest paths from nodes listed in the v parameter to ones included in the to parameter.
+
+```{r}
+prof.path <- shortest_paths(net, 
+             from = V(net)[name=="Anna"], 
+             to  = V(net)[name=="Gia"],
+             output = "both") # both path nodes and edges
+
+# Generate edge color variable to plot the path
+ecol <- rep("gray80", ecount(net))
+ecol[unlist(prof.path$epath)] <- "orange"
+
+# Generate edge width variable to plot the path
+ew <- rep(2, ecount(net))
+ew[unlist(prof.path$epath)] <- 4
+
+# Generate node color variable to plot the path:
+vcol <- rep("gray40", vcount(net))
+vcol[unlist(prof.path$vpath)] <- "gold"
+
+plot(net, vertex.color=vcol, edge.color=ecol, vertex.label=V(net)$name, 
+     edge.width=ew, edge.arrow.mode=0)
+
+```
+
+## Faceting networks
+
+Make the edges a different color depending on the type of connection, virtual or in person.
+
+```{r}
+E(net)$width <- 1.5
+plot(net, edge.color=c("dark red", "slategrey")[(E(net)$type=="virtual")+1],
+     vertex.color="gray40", layout=layout.fruchterman.reingold, edge.curved=.3)
+```
+
+```{r}
+net.m <- net - E(net)[E(net)$type=="virtual"] # another way to delete edges
+net.h <- net - E(net)[E(net)$type=="person"]   # using the minus operator
+
+# Plot the two links separately:
+par(mfrow=c(1,2))
+plot(net.h, vertex.color="orange", layout=layout_with_fr, main="Virtual Connections")
+plot(net.m, vertex.color="lightsteelblue2", layout=layout_with_fr, main="Person Connections")
+```
+
+## A ggraph package example (for ggplot2 users)
+
+```{r}
+
+library(ggraph)
+library(igraph)
+
+ggraph(net) +
+  geom_edge_link() +   # add edges to the plot
+  geom_node_point()    # add nodes to the plot
+
+ggraph(net, layout="fr") +
+  geom_edge_link() +
+  ggtitle("Look ma, no nodes!")  # add title to the plot
+
+
+ggraph(net, layout="fr") +
+  geom_edge_fan(color="gray50", width=0.8) + 
+  geom_node_point(color=V(net)$color, size=8) +
+  theme_void()
+
+ggraph(net, layout = 'linear') + 
+  geom_edge_arc(color = "orange", width=0.8) +
+  geom_node_point(size=5, color="gray50") +
+  theme_void()
+
+ggraph(net, layout="lgl") +
+  geom_edge_link(aes(color = type)) +           # colors by edge type 
+  geom_node_point(aes(size = years.worked)) +  # size by audience size  
+  theme_void()
+
+ggraph(net,  layout = 'lgl') +
+  geom_edge_arc(color="gray", curvature=0.3) +            
+  geom_node_point(color="orange", aes(size = years.worked)) +     
+  geom_node_text(aes(label = name), size=3, color="gray50", repel=T) +
+  theme_void()
+```
+
+## Plotting two-mode networks
+
+As you might remember, our second media example is a two-mode network examining links between news sources and their consumers.
+```{r}
+nodes2 <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset2-UCCS-User-Example-NODES.csv", header=T, as.is=T)
+links2 <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset2-UCCS-User-Example-EDGES.csv", header=T, row.names=1)
+
+head(nodes2)
+head(links2)
+
+links2 <- as.matrix(links2)
+dim(links2)
+dim(nodes2)
+head(nodes2)
+head(links2)
+
+net2 <- graph_from_incidence_matrix(links2)
+table(V(net2)$type)
+```
+
+
+```{r}
+
+head(nodes2)
+head(links2)
+
+net2
+plot(net2, vertex.label=V(net2)$name)
+```
+
+As with one-mode networks, we can modify the network object to include the visual properties that will be used by default when plotting the network. Notice that this time we will also change the shape of the nodes - UCCS employees will be squares, and students will be circles.
+
+```{r}
+# Professors are blue squares, student nodes are orange circles:
+V(net2)$color <- c("steel blue", "orange")[V(net2)$type+1]
+V(net2)$shape <- c("square", "circle")[V(net2)$type+1]
+
+#Professors will have name labels, students will not:
+V(net2)$label <- ""
+V(net2)$label[V(net2)$type==F] <- nodes2$name[V(net2)$type==F] 
+V(net2)$label.cex=.6
+V(net2)$label.font=2
+
+plot(net2, vertex.label.color="white", vertex.size=(2-V(net2)$type)*8) 
+```
+
+```{r}
+plot(net2, vertex.shape="none", vertex.label=nodes2$name,
+     vertex.label.color=V(net2)$color, vertex.label.font=2, 
+     vertex.label.cex=.6, edge.color="gray70",  edge.width=2)
+```
+
+Below I include the use of images as nodes. In order to do this, you will need the png package (if missing, install with install.packages('png')
+
+```{r}
+# install.packages('png')
+library('png')
+
+img.1 <- readPNG("D:/Barboza Law/COC presentation/Day 3/computer.png")
+img.2 <- readPNG("D:/Barboza Law/COC presentation/Day 3/User-Administrator-Green-icon.png")
+
+V(net2)$raster <- list(img.1, img.2)[V(net2)$type+1]
+
+plot(net2, vertex.shape="raster", vertex.label=NA,
+     vertex.size=16, vertex.size2=16, edge.width=2)
+
+```
+
+## Other ways to visualize and represent a network
+
+### Heatmap
+
+```{r}
+netm <- get.adjacency(net, attr="weight", sparse=F)
+colnames(netm) <- V(net)$name
+rownames(netm) <- V(net)$name
+
+palf <- colorRampPalette(c("gold", "dark orange")) 
+heatmap(netm[,17:1], Rowv = NA, Colv = NA, col = palf(100), 
+        scale="none", margins=c(10,10) )
+
+```
+
+### Overlaying networks on geographic maps
+
+```{r}
+library('maps')
+library('geosphere')
+
+par(mfrow = c(2,2), mar=c(0,0,0,0))
+
+map("usa", col="tomato",  border="gray10", fill=TRUE, bg="gray30")
+map("state", col="orange",  border="gray10", fill=TRUE, bg="gray30")
+map("county", col="palegreen",  border="gray10", fill=TRUE, bg="gray30")
+map("world", col="skyblue",  border="gray10", fill=TRUE, bg="gray30")
+
+airports <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset3-Airlines-NODES.csv", header=TRUE) 
+flights <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Dataset3-Airlines-EDGES.csv", header=TRUE, as.is=TRUE)
+
+head(flights)
+head(airports)
+
+
+```
+
+```{r}
+# Select only large airports: ones with more than 10 connections in the data.
+tab <- table(flights$Source)
+big.id <- names(tab)[tab>10]
+airports <- airports[airports$ID %in% big.id,]
+flights  <- flights[flights$Source %in% big.id & 
+                      flights$Target %in% big.id, ]
+
+# Plot a map of the united states:
+map("state", col="grey20", fill=TRUE, bg="black", lwd=0.1)
+
+# Add a point on the map for each airport:
+points(x=airports$longitude, y=airports$latitude, pch=19, 
+       cex=airports$Visits/80, col="orange")
+
+col.1 <- adjustcolor("orange red", alpha=0.4)
+col.2 <- adjustcolor("orange", alpha=0.4)
+edge.pal <- colorRampPalette(c(col.1, col.2), alpha = TRUE)
+edge.col <- edge.pal(100)
+
+for(i in 1:nrow(flights))  {
+  node1 <- airports[airports$ID == flights[i,]$Source,]
+  node2 <- airports[airports$ID == flights[i,]$Target,]
+  
+  arc <- gcIntermediate( c(node1[1,]$longitude, node1[1,]$latitude), 
+                         c(node2[1,]$longitude, node2[1,]$latitude), 
+                         n=1000, addStartEnd=TRUE )
+  edge.ind <- round(100*flights[i,]$Freq / max(flights$Freq))
+  
+  lines(arc, col=edge.col[edge.ind], lwd=edge.ind/30)
+}
+```
+
+To understand how the network helps inform the research question, there are two broad approaches:
+
+* Consider the network as a variable (e.g. regression); do network feature "predict" outcomes; (Does school isolation contribute to delinquency) and
+* Consider networks as structures with causal properties
+
+Both leverage connection and position.
+
+```{r}
+
+
+library(sna)
+library(network) 
+
+
+# The emon dataset - interorganizational networks
+#=============================================================#
+
+# We'll use the emon dataset: interorganizational Search and Rescue
+# Networks (Drabek et al.), included in the "network" package.
+# The dataset contains 7 networks, each node has 8 attributes
+
+#?emon
+data(emon)
+emon  # a list of 7 networks 
+
+# Cheyenne network (the first one in the list)
+ch.net <- emon$Cheyenne 
+plot(ch.net)
+
+# Extract the node attributes of the Cheyenne network into a data frame
+ch.attr <- data.frame(matrix (0,14,8))
+colnames(ch.attr) <-   c("vertex.names", "Command.Rank.Score", "Decision.Rank.Score", "Formalization", "Location", "Paid.Staff", "Sponsorship", "Volunteer.Staff")
+
+# Copy each of the 8 vertex attributes to a variable in the ch.attr data frame
+for (i in 1:8) { ch.attr[,i] <- (ch.net %v% colnames(ch.attr)[i]) }
+
+ch.attr
+
+```
+
+```{r}
+
+# Correlation & Linear Regression in R
+#=============================================================#
+
+# Check the correlation between command rank and decision rank scores:
+# (remember that ch.attr[[2]] is the same as ch.attr$Command.Rank.Score, etc.)
+
+# Calculate the correlation btw command and decision rank
+cor(ch.attr$Command.Rank.Score, ch.attr$Decision.Rank.Score)      
+cor.test(ch.attr$Command.Rank.Score, ch.attr$Decision.Rank.Score) # Examine the significance
+
+# Linear regression: lm(DV ~ IV1 + IV2 + IV3 + ...) 
+# DV = dependent variable, IV = independent variables
+
+# Calculate centrality measures and store them in the ch.attr data frame:
+
+ch.attr$IndegCent  <- degree(ch.net, gmode="digraph", cmode="indegree")  # indegree centralities
+ch.attr$OutdegCent <- degree(ch.net, gmode="digraph", cmode="outdegree") # outdegree centralities 
+ch.attr$BetweenCent <- betweenness(ch.net, gmode="digraph") # betweenness centralities
+
+# We can use the centralities in a linear regression model:
+
+ch.lm.1 <- lm(ch.attr$Command.Rank.Score ~ ch.attr$Paid.Staff + ch.attr$BetweenCent) # Model with betweenness centrality
+summary(ch.lm.1)
+```
+
+## Fake Data
+
+Below I used the same procedure to cluster the fake corrections data. There were only 2 numeric variables in the data set so I could only use those. This illustrates that if something doesn't visualize well, there will be an alternative way that may be relatively "better."
+
+We are clustering mhneeds_lvl and subs_lvl_values across incident codes (ldesc). Instead of visualizng the clusters I created a dendogram using fviz_dend.
+
+```{r}
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization (fvis cluster and fvis distance)
+
+fake_data <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/fake_data.csv")
+#Select only data on the columns of interest. Here I selected the variable ldesc and the two numeric variables: #mhneeds_lvl and subs_lvl_values.
+df <- fake_data[, c(9, 4:5)]
+
+#This command aggregates the data by ldesc and calculates the overall means for the mhneeds and substance use needs for each ldesc 
+df <- aggregate(fake_data[, 4:5], list(ldesc=fake_data$ldesc), mean)
+
+#We cannot cluster on the variable ldesc so below we set that column to be labels
+df2 <- df[,-1]
+rownames(df2) <- df[,1]
+
+#Here we scale the data to normalize it, by subtracting each variable from the mean and then dividing by std dev
+df2 <- scale(df2)
+
+#The command head is like glimpse and allows us to take a look at a few rows of the data, the default is 5 rows
+head(df2)
+
+#This calculates the distance between observations
+distance <- get_dist(df2)
+
+#This command visualizes the distance. Note: you can change these colors to anything you want.
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+
+final <- kmeans(df2, 3, nstart = 25)
+fviz_cluster(final,  data = df2)
+
+# Visualize dendrogram using the cluster agglomeration method "complete" which computes all pairwise dissimiarities
+hc.cut <- hcut(df2, k = 3, hc_method = "complete")
+fviz_dend(hc.cut, show_labels = TRUE, rect = TRUE)
+```
+
+Property damage and use of force are most similar, then sexual act, etc.
+
+# Data Transformation
+As we discussed last week, the data are rarely, if ever, in the format you need. At a minimum, new variables must be created, the variables may need recoding, variable summaries will need to be created, and often its important to rename variables. One of the most powerful packages to reformat data in R is called dplyr. We will cover dplyr basics below. Let's use a different data set on crimes from the city of Los Angeles. 
+
+Let's take a look at the [data we will be using](https://data.lacity.org). The way these data are made available is very common, as all big, open data websites allow multiple methods of downloading the data. Additionally, if the data are in spatial format, there are several options for downloading the spatial data as well. Note, sometimes the data are spatial but are made available in a non-spatial way, such as a csv file. No need to worry because those data can be transformed and then mapped accordingly.
+
+From the city of LA open website, click data catalog. This is data we saw last week. Notice the column called "Crm Cd Desc" of the types of crime. Let's look at data on domestic violence. There are two ways to filter these data. 
+
+1. In the box titled "Find in this Dataset" type "intimate partner - aggravated" then click "Export" and "CSV for excel." This results in a downloaded file containing only these types of crimes. There were 1,363 cases of aggravated domestic assault committed in the city of LA since Jan 1, 2020 (as of July 5, 2020).
+
+Download the data to your computer and open the file. First, open it in Excel. 
+
+I already uploaded this data to my githum, let's load it into RStudio.
+
+Let's call this data set IPV_data.
+```{r load crime data}
+IPV_data <- read.csv("https://raw.githubusercontent.com/elisegia/COC/master/Crime_Data_from_2020_to_Present_import.csv")
+
+#glimpse allows us to view the first few rows of the data
+glimpse(IPV_data)
+```
+
+There are several data types that we want to note. Also, there is a variable called "Premise Desc". 
+Let's make a table of values so we can see the types of premises that are associated with IPV. 
+The default table in R is ugly so I am going to use a library called **kable** (along with the commands of dplyr) which formats the table nicely for me. To use kable we need to load the knitr library.
+
+## Filtering data
+```{r table of where crimes are}
+library(knitr)
+IPV_data %>%
+  group_by(Premis.Desc)%>%
+  summarize(n=n())%>%
+  arrange(-n) %>%
+  kable()
+```
+
+Let's select "SINGLE FAMILY DWELLING" and "MULTI-UNIT DWELLING (APARTMENT, DUPLEX, ETC)" so we are sure this is domestic. We use "filter" to filter the data by rows in this way.
+
+```{r subset data by premise type focusing in domestic}
+IPV_subset <- filter(IPV_data, Premis.Desc =="SINGLE FAMILY DWELLING" | Premis.Desc == "MULTI-UNIT DWELLING (APARTMENT, DUPLEX, ETC)")
+```
+
+Looks Good!
+
+Let's create a heat map by day and month. We start by making a table of weekday and month. The we store the table results into a data frame. We do this so we can manipulate the variables a bit. For example, I want the days to be in a given order Mon - Sun. When we store data in this way, the variables names are by default. I changed them back to "Weekday" and "Month" and used ggplot with the geom **geom_tile** to visualize the results.
+```{r}
+table(IPV_subset$weekday, IPV_subset$month)
+DayHourCount <- as.data.frame(table(IPV_subset$weekday, IPV_subset$month))
+DayHourCount$Var1 <- factor(DayHourCount$Var1, ordered = T, levels = c("Mon", "Tue", "Wed", "Thu","Fri", "Sat","Sun"))
+colnames(DayHourCount)[1] <- "Weekday"
+colnames(DayHourCount)[2] <- "Month"
+
+ggplot(DayHourCount, aes(x = Weekday, y = Month)) + 
+  geom_tile(aes(fill = Freq))
+```
+
+Now, let's select a few columns to make the data more manageable, and then look at some summary statistics.
+
+```{r select columns}
+IPV_subset_columns <- select(IPV_subset, formatted_newdate, TIME.OCC, day, month, time, Vict.Age, Vict.Sex, Vict.Descent, Mocodes, LAT, LON, Status.Desc)
+```
+
+Nice. Let's create grouped summaries now. We do that with the group_by function in dplyr. When you use the dplyr commands on a grouped dataset they will automatically be applied to the group. This example also introduces the "pipe" operator which allows you to perform multiple operations at once. 
+```{r mean age by victim gender}
+library(dplyr)
+IPV_subset_columns %>%
+  group_by(Vict.Sex) %>%
+  summarize(mean_age = mean(Vict.Age, na.rm = TRUE)) %>%
+  kable()
+```
+
+Here is another example
+```{r mean age by gender for whites only}
+IPV_subset_columns  %>%  
+  group_by(Vict.Sex) %>% 
+  filter(Vict.Descent =="W") %>% 
+  summarize(
+    count = n(), mean_age = mean(Vict.Age, na.rm=TRUE)
+    )
+```
+
+And another... *what does this code do?*
+```{r}
+IPV_subset_columns  %>%  
+  group_by(Vict.Sex, Vict.Descent) %>% 
+  summarize(
+    count = n(), mean_age = mean(Vict.Age, na.rm=TRUE)
+    )
+```
+
+Manipulating data in this way is useful for the visualization techniques below. For example, the Sankey diagram. First let's do another exercise.
+
+### Exercise 6 Fake data
+Calculate the mean levels of mental health needs for black and whites by incident description (ldesc). Here is the data:
+
+```{r}
+str(fake_data)
+```
+
+
+```{r eval=FALSE}
+fake_data  %>%  
+  group_by(XXXX, XXXX) %>% 
+  filter(XXXX =="W" | XXXX == "B") %>% 
+  dplyr::summarize(
+    mental_health_level = mean(mhneeds_lvl, na.rm=TRUE)
+    )
+```
+
+```{r ex6_solution}
+fake_data  %>%  
+  group_by(ldesc, ethnic_cd) %>% 
+  filter(ethnic_cd =="W" | ethnic_cd == "B") %>% 
+  dplyr::summarize(
+    mental_health_level = mean(mhneeds_lvl, na.rm=TRUE)
+    )
+```
+
+## Sankey Diagrams
+
+A few things to note:
+
+The Sankey diagram is in a different order to the data in the table. Sankey automatically orders the categories to minimize the amount of overlap between rows. Where two rows in the table contain the same information, Sankey automatically combines them. The Sankey diagram automatically merges together the nodes (blocks) that have the same values.
+
+[click here](https://www.azavea.com/blog/2017/08/09/six-sankey-diagram-tool/) for a discussion about how to interpret these diagrams.
+```{r}
+Sankey_data <-IPV_subset %>% 
+  select(AREA.NAME, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  group_by(AREA.NAME, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  dplyr::summarize(
+    count = n())
+```
+
+Let's look at the resulting data
+
+```{r}
+Sankey_data
+```
+
+```{r, warning=FALSE}
+library(ggalluvial)
+ggplot(data = Sankey_data,
+       aes(axis1 = AREA.NAME, axis2 = Vict.Sex, axis3 = Vict.Descent,
+           y = count)) +
+  scale_x_discrete(limits = c("Area", "Sex", "Race/Ethnicity"), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = Status.Desc)) +
+  geom_stratum() + geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("Investigation Status of IPV Incidents",
+          "Stratified by Victim demographics and Community") +
+  theme(legend.position = 'bottom')
+```
+
+You will notice that the diagram needs to be cleaned up a bit. First, there are too many neighborhood areas represented, also the race/ethnicity variable has too few cases for some of the categories. Let's select six neighborhood areas and redraw the chart.
+
+```{r, warning=FALSE}
+Sankey_data <-IPV_subset %>% 
+  select(AREA.NAME, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  group_by(AREA.NAME, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  filter(AREA.NAME == "77th Street" | AREA.NAME == "N Hollywood" | AREA.NAME == "Southeast"| AREA.NAME == "Southwest"| AREA.NAME == "Rampart"| AREA.NAME == "Olympic") %>%
+  dplyr::summarize(
+    count = n())
+
+ggplot(data = Sankey_data,
+       aes(axis1 = AREA.NAME, axis2 = Vict.Sex, axis3 = Vict.Descent,
+           y = count)) +
+  scale_x_discrete(limits = c("Area", "Sex", "Race/Ethnicity"), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = Status.Desc)) +
+  geom_stratum() + geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("Investigation Status of IPV Incidents",
+          "Stratified by Victim demographics and Community") +
+  theme(legend.position = 'bottom')
+```
+
+### Exercise 7
+
+In this exercise you will create a Sankey diagram using the crime category description instead of crime area, along with dempgraphic characteristics gender and Race/Ethnicity First, create a data set called Sankey as we did above and select the relevant variables. For this excercise only select Blacks, Hispanics and Whites. Use the dplyr commands to format the data in the appropriate way. Follow the steps below:
+
+```{r eval = FALSE}
+Sankey_data <-IPV_subset %>% 
+  select(XXXX, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  group_by(XXXX, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  filter(XXXX) %>%
+  dplyr::summarize(
+    count = n())
+```
+
+```{r eval = FALSE}
+ggplot(data = Sankey_data,
+       aes(axis1 = XXXX, axis2 = XXXX, axis3 = XXXX,
+           y = count)) +
+  scale_x_discrete(limits = c(XXXX), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = XXXX)) +
+  geom_stratum() + geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("Investigation Status of IPV Incidents",
+          "Stratified by Victim demographics and Place of Injury") +
+  theme(legend.position = 'bottom')
+```
+
+```{r ex7_solution, warning=FALSE}
+Sankey_data <-IPV_subset %>% 
+  dplyr::select(Premis.Desc, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  dplyr::mutate(Premis.Desc = str_replace(Premis.Desc, ".*MULTI-UNIT.*", "Apartment")) %>%
+  dplyr::mutate(Premis.Desc = str_replace(Premis.Desc, ".*SINGLE.*", "Family Home")) %>%
+  dplyr::group_by(Premis.Desc, Vict.Sex, Vict.Descent, Status.Desc) %>% 
+  dplyr::filter(Vict.Descent == "B" | Vict.Descent == "H" | Vict.Descent == "W") %>%
+  dplyr::summarize(
+    count = n())
+```
+
+```{r, warning=FALSE}
+ggplot(data = Sankey_data,
+       aes(axis1 = Premis.Desc, axis2 = Vict.Sex, axis3 = Vict.Descent,
+           y = count)) +
+  scale_x_discrete(limits = c("Area", "Sex", "Race/Ethnicity"), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = Premis.Desc)) +
+  geom_stratum() + 
+  geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("Investigation Status of IPV Incidents",
+          "Stratified by Victim demographics and Place of Injury") +
+  theme(legend.position = 'bottom')
+```
+
+## Fake Data
+How do we get from X to the committed offense?
+
+```{r sankey filter data}
+Sankey_data <-fake_data %>% 
+  select(highschool_ged, ethnic_cd, mhneeds_lvl, off_mdesc) %>% 
+  mutate(off_mdesc = str_replace(off_mdesc, ".*ABUSE .*", "Misdemeanor")) %>%
+  mutate(off_mdesc = str_replace(off_mdesc, ".*HOMICIDE-.*", "Homicide")) %>%
+  mutate(off_mdesc = str_replace(off_mdesc, ".*FINANCIAL .*", "Financial")) %>%
+  mutate(off_mdesc = str_replace(off_mdesc, ".*CRIME .*", "Crime Act")) %>%
+  mutate(off_mdesc = str_replace(off_mdesc, ".*CRIMINAL .*", "Criminal Attempt")) %>%
+  group_by(highschool_ged, ethnic_cd, mhneeds_lvl, off_mdesc) %>% 
+  filter(ethnic_cd == "B" | ethnic_cd == "H" | ethnic_cd == "W") %>%
+  dplyr::summarize(
+    count = n())
+```
+
+```{r sankey fake data, warning = FALSE}
+ggplot(data = Sankey_data,
+       aes(axis1 = highschool_ged, axis2 = ethnic_cd, axis3 = mhneeds_lvl,
+           y = count)) +
+  scale_x_discrete(limits = c("GED Status", "Race/Ethnicity", "Mental Health"), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = off_mdesc), main = "Offense Description") +
+  geom_stratum() + 
+  geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("Investigation Status of IPV Incidents",
+          "Stratified by Victim demographics and Place of Injury") +
+  theme(legend.position = 'bottom')
+```
+
+# Connecting to Big Open Data
+Sometimes we would rather connect to the data directly from the provider's website. These providers make their data available through the API. Some websites require you to register and get a token prior to accessing the API. This is a powerful way to connect to data, as the following examples demonstrate.
+
+The R library that allows you to connect to, and query, a website is called RSocrata. This is like reading a csv file directly from a website. However, RSocrata allows you to query the data (i.e. the big data) before you open it! You do this by passing the query string directly into url, as follows.
+
+Let's open the la city crime data by directly accessing it from city of LA's open data portal. Note, this will take a few seconds because it's a very large file.
+
+```{r connect to open data using API}
+library(RSocrata)
+base_url = "https://data.lacity.org/resource/2nrs-mtv8.json?" #this is 2020 to present
+
+my_token <- "w0BkWUPZYzjQRwNEVX8KEijw4"
+lacity_data <- read.socrata(base_url, my_token)
+glimpse(lacity_data)
+```
+
+Notice that all of the crimes committed were downloaded, over 95,000. This is only data from Jan 1, 2020 to the present. Notice also that the variable names are lower case, which is important because R is case sensitive.
+
+I can query the data by creating a SQL statement and embedding it into the URL. Depending on the type of data you have, some query strings include:
+-- is
+-- between
+-- is not
+-- starts with 
+-- contains
+
+Let's create the string and query the data between June 1, 2020 and the present. I used a trick for the present date, which is to grab the computer's system date (Sys.Date()) which should be today's date.
+
+```{r create query}
+Sys.Date() # Today's date
+(query_string = paste("'", Sys.Date(),"'", sep="")) # The query string has to be a particular format, surrounded by single quotes
+(base_url = paste("https://data.lacity.org/resource/2nrs-mtv8.json?$where=date_occ between '2020-06-01' and", query_string)) #this is 2020 to present
+```
+
+Put the URL above into the browser to see the data that will be returned. If there is no data there is an error.
+
+Note: The overwhelming majority of sites have this same format.
+
+Now we can connect to the data as before.
+
+```{r}
+lacity_data <- read.socrata(base_url, my_token)
+glimpse(lacity_data)
+```
+
+
+### Exercise 8
+Create a query string that selects only cases where the variable vict.sex is female only.
+
+```{r eval=FALSE}
+base_url = "https://data.lacity.org/resource/2nrs-mtv8.json?$where=vict_sex = 'F'"
+lacity_data_females <- read.socrata(base_url, my_token)
+glimpse(lacity_data_females)
+```
+
+Let's make a wordcloud of the area names in the full data set.
+```{r street name wordcloud}
+library(RColorBrewer) 
+library(wordcloud)
+pal = brewer.pal(9,"Blues")
+street_name <- as.data.frame(table(lacity_data$area_name))
+colnames(street_name) <- c("Street_Name", "Count")
+wordcloud(street_name$Street_Name, street_name$Count, min.freq = 100, max.words = 15, random.order = T, random.color = T, colors =c("green", "cornflowerblue", "darkred"), scale = c(2,.3))
+```
+
+```{r treemap}
+library(treemap)
+treemap_df <-
+  lacity_data %>%
+  dplyr::filter(str_detect(crm_cd_desc, "CHILD NEGLECT|CHILD ABUSE|INTIMATE PARTNER")) %>% 
+  dplyr::group_by(area_name, crm_cd_desc) %>%
+  dplyr::summarize(n = n())
+```
+
+```{r}
+treemap(treemap_df, 
+        index=c("area_name","crm_cd_desc"), 
+        vSize="n", 
+        type="index",
+        fontsize.labels=c(15,12),
+        fontcolor.labels=c("white","orange"),
+        fontface.labels=c(2,1), 
+        bg.labels=c("transparent"),
+        align.labels=list(
+          c("center", "center"), 
+          c("center", "top")
+        ),                                 
+        overlap.labels=0.2,                     
+        inflate.labels=T
+      )
+```
+
+## Fake data
+```{r treemap fake data}
+treemap_df <-
+  fake_data %>%
+  dplyr::group_by(ethnic_cd, ldesc) %>%
+  dplyr::summarize(n = n())
+```
+
+```{r make treemap}
+treemap(treemap_df, 
+        index=c("ethnic_cd","ldesc"), 
+        vSize="n", 
+        type="index",
+        fontsize.labels=c(15,12),
+        fontcolor.labels=c("white","orange"),
+        fontface.labels=c(2,1), 
+        bg.labels=c("transparent"),
+        align.labels=list(
+          c("center", "center"), 
+          c("center", "top")
+        ),                                 
+        overlap.labels=0.2,                     
+        inflate.labels=F
+      )
+```
+
+## Diversion
+I want to divert for a second to show you how to get the mo codes into text and then introduce the idea of mapping.
+```{r select and view data}
+ipv_crimes_in_la <- lacity_data %>%
+  mutate(vict_age = as.numeric(vict_age)) %>%
+  filter(str_detect(crm_cd_desc, "INTIMATE PARTNER"),
+         str_detect(premis_desc, "MOTORHOME|GROUP HOME|MOTEL|DWELLING|RESIDENTIAL|HOUSING")) %>%
+  mutate(crm_cd_desc = str_replace(crm_cd_desc, ".*INTIMATE PARTNER.*", "IPV"))%>%
+  select("dr_no", "crm_cd_desc", "date_occ", "time_occ",  "lat", "lon", "mocodes","area_name",  "vict_age", "vict_sex", "vict_descent", "premis_desc", "weapon_desc", "status_desc")
+
+glimpse(ipv_crimes_in_la)
+```
+
+```{r number of crimes by area}
+crimebyarea <-  ipv_crimes_in_la  %>%
+  dplyr::group_by(crm_cd_desc, area_name) %>%
+  dplyr::summarise(count= n())
+
+crimebyarea
+```
+
+
+```{r mo codes}
+ipv_crimes_in_la$mo <- ipv_crimes_in_la$mocodes
+ipv_crime_mo <- separate(data = ipv_crimes_in_la, col = mocodes, into = 
+                c("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10"), 
+                sep = " ")
+#makes all "m" variables numeric at once
+ipv_crime_mo[,7:16] <- sapply(ipv_crime_mo[,7:16],as.numeric)
+glimpse(ipv_crime_mo)
+
+tbl_lookup<-read.csv("D:/Barboza Law/COC presentation/Day 2/MO_CODES_Numerical_20180627.csv")
+names(tbl_lookup)[1] <- "id"
+
+for (i in 1:10){
+  ipv_crime_mo[,(length(ipv_crime_mo)+1)] = tbl_lookup[match(ipv_crime_mo[,(i+6)], tbl_lookup$id), "descript"] 
+}
+
+library(writexl)
+write_xlsx(ipv_crime_mo, "ipv_crime_mo.xlsx")
+```
+
+We know have all IPV incidents between June 1, 2020 to the present (whatever that date is, today happens to be July 8, but tomorrow that will be a different date). Let's illustrate the power of data mining by returning all of the modus operandi codes where the partners were "gay."
+
+```{r identify homosexual related IPV crimes}
+
+homosexual_data <- ipv_crime_mo %>% 
+  filter_at(.vars = vars(V25, V26, V27, V28, V29, V30, V31, V32, V33, V34), 
+            .vars_predicate = any_vars(str_detect(. , "Homo")))
+
+```
+
+Next, let's start to explore how to cluster crime across space (and time). You may have noticed that this dataset contains the lattitude (Y) and longitude (X) associated with each crime incident. Let's map the crimes we downloaded and see if we can see any unique relationships.
+
+R has a number of powerful GIS-related functions. We will use a number of these functions to map our data. These appear below.
+```{r mapping libraries}
+library(rgdal)
+library(sf)
+library(sp)
+library(spdep)
+library(tmap)
+library(tigris)
+```
+
+In order to create a boundary of our region, we need to have a shapefile. I have already downloaded a shapefile of the city of LA, and it also contains data on COVID-19 cases across the city.
+
+Open shapefile
+```{r open shapefile}
+lacity_bdry <- st_read("D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/nghbrhd_data.shp")%>%
+  st_transform(4269)
+
+plot(lacity_bdry)
+```
+
+In order to map the crime data onto the city boundary, we have to first transform it into a map file, which is really easy using the **sf** library in R. Here are the simple steps:
+
+* Convert the data into a point shapefile using the spatial coordinates of the data file
+* Make sure the CRS is the same for the point shapefile and boundary file, as follows:
+```{r}
+points_sf <- st_as_sf(homosexual_data, coords = c("lon", "lat"))
+st_crs(points_sf) <- st_crs(lacity_bdry)
+```
+
+```{r}
+plot(lacity_bdry$geometry)
+plot(points_sf$geometry, col = "dark red", lwd = 4, cex = .4, add = TRUE)
+```
+
+Cool. There is clearly a cluster near Rampart.
+
+## Exercise #8
+In this exercise, you will create a spatial point file of all incidents and overlay it onto the shapefile of la city. Since there is more data there is inevitably some data cleaning to do. First, we want to select only valid lat and long values. Look at the data and you will see that there are a number of lat and long with values of 0. Let's remove them.
+
+```{r}
+#ipv_crime_mo <- ipv_crime_mo[complete.cases(ipv_crime_mo), ] 
+ipv_crime_mo$lon <- as.numeric(as.character(ipv_crime_mo$lon))
+ipv_crime_mo$lat <- as.numeric(as.character(ipv_crime_mo$lat))
+ipv_crime_mo <- ipv_crime_mo %>% filter(lon<0)
+```
+
+### Exercise 9
+```{r eval = FALSE}
+points_sf <- st_as_sf(ipv_crime_mo, coords = c(XXXX))
+st_crs(XXXX) <- st_crs(lacity_bdry)
+plot(lacity_bdry$geometry)
+plot(XXXX, col = "dark red", lwd = 4, cex = .4, add = TRUE)
+```
+
+```{r ex9_solution}
+points_sf <- st_as_sf(ipv_crime_mo, coords = c("lon", "lat"))
+st_crs(points_sf) <- st_crs(lacity_bdry)
+plot(lacity_bdry$geometry)
+plot(points_sf$geometry, col = "dark red", lwd = 2, cex = .2, add = TRUE)
+```
+
+```{r}
+merged_crimes <- st_join(lacity_bdry,points_sf) %>% 
+  dplyr::group_by(COMTY_NAME) %>%                  # group by unique tract ID
+  dplyr::mutate(ipv_crimes = n()) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(COMTY_NAME, ipv_crimes, geometry, count) %>% 
+  dplyr::distinct(COMTY_NAME, ipv_crimes, geometry, count) 
+
+```
+
+## tmap basics
+tmap is similar to ggmap in that each input dataset can be ‘mapped’ in a range of different ways including location on the map (defined by data’s geometry), color, and other visual variables. The basic building block is tm_shape() (which defines input data, raster and vector objects), followed by one or more layer elements such as tm_fill() and tm_dots(). This layering is demonstrated in the chunk below. 
+
+The object passed to tm_shape() in this case is **merged_crimes**, an sf object representing the the IPV incident counts in census tracts from the city of LA boundary file. Layers are added to represent merged_crimes visually, with tm_fill() and tm_borders() creating shaded areas (left panel) and border outlines 
+```{r}
+# Add fill layer to nz shape
+tm_shape(merged_crimes) +
+  tm_fill() 
+# Add border layer to nz shape
+tm_shape(merged_crimes) +
+  tm_borders() 
+# Add fill and border layers to nz shape
+tm_shape(merged_crimes) +
+  tm_fill() +
+  tm_borders() 
+```
+
+```{r}
+tm_shape(merged_crimes) + 
+  tm_polygons() 
+```
+
+```{r}
+tm_shape(merged_crimes) + 
+  tm_fill(col = "ipv_crimes")
+```
+
+```{r}
+tm_shape(merged_crimes) + 
+  tm_fill('ipv_crimes') +
+  tm_borders('gray72') +
+  tm_layout(legend.position = c('LEFT', 'bottom'),
+            panel.label.size = 1, 
+            panel.label.color = 'black',
+            panel.label.bg.color = 'gainsboro', 
+            panel.label.height = 1.25,
+            main.title = 'IPV in Los Angeles Cases',
+            main.title.size = 1.2) 
+```
+
+```{r}
+tm_shape(merged_crimes) +
+  tm_polygons("count", title = "COVID-19 count", palette = "GnBu",
+              style = "kmeans",
+              legend.hist = T) +
+  tm_shape(merged_crimes) +
+  tm_bubbles("ipv_crimes", title.size = "Intimate Partner Violence", col = "gold")+
+  tm_scale_bar(width = 0.22, position = c("left", "bottom")) +
+  tm_compass(position = c("right", "bottom"))+
+  tm_layout(frame = F, 
+            title = "City of Los Angeles", 
+            title.size = 2, 
+            legend.hist.size = 0.5, 
+            legend.outside = T) 
+```
+
+```{r}
+my_interactive_covid_dv_map<-tm_shape(merged_crimes) +
+  tm_polygons("count", title = "COVID-19 count", palette = "GnBu",
+              style = "kmeans",
+              legend.hist = T) +
+  tm_shape(merged_crimes) +
+  tm_bubbles("ipv_crimes", title.size = "Intimate Partner Violence", col = "gold")+
+  tm_scale_bar(width = 0.22, position = c("left", "bottom")) +
+  tm_compass(position = c("right", "bottom"))+
+  tm_layout(frame = F, 
+            title = "City of Los Angeles", 
+            title.size = 2, 
+            legend.hist.size = 0.5, 
+            legend.outside = T) 
+
+tmap_mode("view")
+tmap_leaflet(my_interactive_covid_dv_map)
+tmap_mode(mode="plot")
+```
+
+```{r}
+tm_shape(merged_crimes) +
+  tm_polygons('#f0f0f0f0', border.alpha = 0.2) + 
+  tm_shape(points_sf) + 
+  tm_dots(size=.3, col="black") 
+```
+
+## Working and merging census data
+One of the most powerful open data sources is census data. There are a few functions in R that allow you to automatically connect to, download and merge census data into your analyses. Let's try that with the next few commands. We have data from Los Angeles, so we will download data from LA county at the tract level and then intersect the shapefiles to return only data from LA city!
+
+In order to use these functions, you need to get a census API key (as above). This is easy to get. Once you do, you can paste your key below and have your own.
+```{r}
+library(tidycensus)
+library(tidyverse)
+options(tigris_use_cache = TRUE)
+
+census_api_key("0f318090e26bc2bcdb1bda09a7ff3be3f421bf84", overwrite=TRUE)
+readRenviron("~/.Renviron")
+
+la_county <- get_acs(state = "CA", county = "Los Angeles", geography = "tract", 
+                  variables = "B10052_002", geometry = TRUE)
+
+
+```
+
+```{r}
+head(la_county)
+```
+
+### Searching for variables
+```{r}
+#v17 <- load_variables(2017, "acs5", cache = TRUE)
+
+#View(v17)
+```
+ 
+```{r}
+la_county %>%
+  ggplot(aes(fill = estimate)) + 
+  geom_sf(color = NA) + 
+  coord_sf(crs = 26911) + 
+  scale_fill_viridis_c(option = "magma") 
+
+```
+
+```{r}
+racevars <- c(White = "P005003", 
+
+              Black = "P005004", 
+              Asian = "P005006", 
+              Hispanic = "P004003")
+
+la_decennial <- get_decennial(geography = "tract", variables = racevars, 
+                  state = "CA", county = "Los Angeles County", geometry = TRUE,
+                  summary_var = "P001001") 
+head(la_decennial)
+```
+ 
+```{r}
+la_decennial %>%
+  mutate(pct = 100 * (value / summary_value)) %>%
+  ggplot(aes(fill = pct)) +
+  facet_wrap(~variable) +
+  geom_sf(color = NA) +
+  coord_sf(crs = 26911) + 
+  scale_fill_viridis_c()
+```
+ 
+```{r}
+
+st_crs(la_decennial) <- st_crs(lacity_bdry)
+plot(x_and_y <- st_intersection(la_decennial, lacity_bdry), col = "lightgrey", main="st_intersection")
+```
+ 
+```{r}
+x_and_y %>%
+  mutate(pct = 100 * (value / summary_value)) %>%
+  ggplot(aes(fill = pct)) +
+  facet_wrap(~variable) +
+  geom_sf(color = NA) +
+  coord_sf(crs = 26911) + 
+  scale_fill_viridis_c()
+```
+ 
+```{r}
+tm_shape(x_and_y) +
+  tm_polygons("value", title = "race", palette = "GnBu",
+              style = "kmeans") + 
+  tm_facets(by = "variable", drop.NA.facets = TRUE) +
+  tm_shape(points_sf) + tm_dots(size=.1, title.size = "Intimate Partner Violence", col = "gold") 
+```
+
+## Fake Data
+In this final exercise you will find census data for the state of Colorado, county of Denver, and map it.
+```{r eval = FALSE}
+
+options(tigris_use_cache = TRUE)
+
+census_api_key("0f318090e26bc2bcdb1bda09a7ff3be3f421bf84", overwrite=TRUE)
+readRenviron("~/.Renviron")
+
+denver_county <- get_acs(state = "XXXX", county = "XXXX", geography = "XXXX", 
+                  variables = "XXXX", geometry = TRUE)
+
+```
+
+```{r}
+
+options(tigris_use_cache = TRUE)
+
+census_api_key("0f318090e26bc2bcdb1bda09a7ff3be3f421bf84", overwrite=TRUE)
+readRenviron("~/.Renviron")
+
+denver_county <- get_acs(state = "CO", county = "Denver County", geography = "tract", 
+                  variables = "B10052_002", geometry = TRUE)
+
+tm_shape(denver_county) +
+  tm_polygons("estimate", title = "Number of Disabled in Denver Co", palette = "GnBu",
+              style = "kmeans",
+              legend.hist = T) +
+  tm_shape(denver_county) +
+  tm_bubbles("moe", title.size = "Margin of Error", col = "gold")+
+  tm_scale_bar(width = 0.22, position = c("left", "top")) +
+  tm_compass(position = c("right", "bottom"))+
+  tm_layout(frame = F, 
+            title = "Denver County", 
+            title.size = 2, 
+            legend.hist.size = 0.5, 
+            legend.outside = T) 
+
+```
+
