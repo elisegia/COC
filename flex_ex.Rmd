@@ -1,0 +1,57 @@
+---
+title: "COC Example Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    social: menu
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(plotly)
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Chart A: Race
+
+```{r}
+library(data.table)
+library(ggpubr)
+theme_set(theme_pubr())
+
+child_deaths <- fread("/Volumes/Seagate Backup Plus Drive/Research/LA County/california-coronavirus-data-master/child_deaths_all_0to5_covid.csv")
+
+p <- ggplot(child_deaths, aes(brace)) +
+  geom_bar(fill = "#0073C2FF") +
+  theme_pubclean()          # Add a loess smoothed fit curve with confidence region
+ggplotly(p)
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B: Month
+
+```{r}
+
+p <- ggplot(data=child_deaths, aes(child_deaths$month)) +
+  geom_histogram(
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  labs(title="Histogram for Month", x="Age", y="Count") 
+ggplotly(p)
+```
+
+### Chart C: Causes
+
+```{r}
+p <- ggplot(child_deaths, aes(causes)) +
+  geom_bar(fill = "#0073C2FF") +
+  theme_pubclean()          # Add a loess smoothed fit curve with confidence region
+ggplotly(p)
+```
+
