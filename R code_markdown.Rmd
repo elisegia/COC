@@ -826,7 +826,7 @@ From the city of LA open website, click data catalog. This is data we saw last w
 
 Download the data to your computer and open the file. First, open it in Excel. 
 
-I already uploaded this data to my githum, let's load it into RStudio.
+I already uploaded this data to my github, let's load it into RStudio.
 
 Let's call this data set IPV_data.
 ```{r load crime data}
@@ -1035,7 +1035,7 @@ ggplot(data = Sankey_data,
            y = count)) +
   scale_x_discrete(limits = c("Area", "Sex", "Race/Ethnicity"), expand = c(.1, .05)) +
   xlab("Demographic") +
-  geom_alluvium(aes(fill = Premis.Desc)) +
+  geom_alluvium(aes(fill = Status.Desc)) +
   geom_stratum() + 
   geom_text(stat = "stratum", infer.label = TRUE) +
   theme_minimal() +
@@ -1087,6 +1087,7 @@ Let's open the la city crime data by directly accessing it from city of LA's ope
 library(RSocrata)
 base_url = "https://data.lacity.org/resource/2nrs-mtv8.json?" #this is 2020 to present
 
+#to get a token for your own app go to https://opendata.socrata.com/login which is good for any site using socrata
 my_token <- "w0BkWUPZYzjQRwNEVX8KEijw4"
 lacity_data <- read.socrata(base_url, my_token)
 glimpse(lacity_data)
@@ -1101,7 +1102,17 @@ I can query the data by creating a SQL statement and embedding it into the URL. 
 -- starts with 
 -- contains
 
-Let's create the string and query the data between June 1, 2020 and the present. I used a trick for the present date, which is to grab the computer's system date (Sys.Date()) which should be today's date.
+### Query data to return only females
+Create a query string that selects only cases where the variable vict.sex is female only.
+
+```{r eval=FALSE}
+base_url = "https://data.lacity.org/resource/2nrs-mtv8.json?$where=vict_sex = 'F'"
+lacity_data_females <- read.socrata(base_url, my_token)
+glimpse(lacity_data_females)
+```
+
+Let's create the string and query the data between June 1, 2020 and the present. 
+I used a trick for the present date, which is to grab the computer's system date (Sys.Date()) which should be today's date.
 
 ```{r create query}
 Sys.Date() # Today's date
@@ -1121,23 +1132,16 @@ glimpse(lacity_data)
 ```
 
 
-### Exercise 8
-Create a query string that selects only cases where the variable vict.sex is female only.
 
-```{r eval=FALSE}
-base_url = "https://data.lacity.org/resource/2nrs-mtv8.json?$where=vict_sex = 'F'"
-lacity_data_females <- read.socrata(base_url, my_token)
-glimpse(lacity_data_females)
-```
 
 Let's make a wordcloud of the area names in the full data set.
 ```{r street name wordcloud}
 library(RColorBrewer) 
 library(wordcloud)
 pal = brewer.pal(9,"Blues")
-street_name <- as.data.frame(table(lacity_data$area_name))
-colnames(street_name) <- c("Street_Name", "Count")
-wordcloud(street_name$Street_Name, street_name$Count, min.freq = 100, max.words = 15, random.order = T, random.color = T, colors =c("green", "cornflowerblue", "darkred"), scale = c(2,.3))
+neigh_name <- as.data.frame(table(lacity_data$area_name))
+colnames(neigh_name) <- c("Name", "Count")
+wordcloud(neigh_name$Name, neigh_name$Count, min.freq = 100, max.words = 15, random.order = T, random.color = T, colors =c("green", "cornflowerblue", "darkred"), scale = c(2,.3))
 ```
 
 ```{r treemap}
@@ -1224,7 +1228,7 @@ ipv_crime_mo <- separate(data = ipv_crimes_in_la, col = mocodes, into =
 ipv_crime_mo[,7:16] <- sapply(ipv_crime_mo[,7:16],as.numeric)
 glimpse(ipv_crime_mo)
 
-tbl_lookup<-read.csv("D:/Barboza Law/COC presentation/Day 2/MO_CODES_Numerical_20180627.csv")
+tbl_lookup<-read.csv("/Volumes/Seagate Backup Plus Drive/Barboza Law/COC presentation/Day 2/MO_CODES_Numerical_20180627.csv")
 names(tbl_lookup)[1] <- "id"
 
 for (i in 1:10){
@@ -1247,7 +1251,27 @@ homosexual_data <- ipv_crime_mo %>%
 
 Next, let's start to explore how to cluster crime across space (and time). You may have noticed that this dataset contains the lattitude (Y) and longitude (X) associated with each crime incident. Let's map the crimes we downloaded and see if we can see any unique relationships.
 
-R has a number of powerful GIS-related functions. We will use a number of these functions to map our data. These appear below.
+R has a number of powerful GIS-related functions. We will use a number of these functions to map our data. R makes it possible to read and edit spatial data, conduct geoprocessing and spatial analysis and create static and interactive maps. 
+
+In order to map the boundary of a region, we need to have a shapefile. There are many types of shapefiles: point, line and polygon.
+
+I have already downloaded a shapefile of the city of LA, and it also contains data on COVID-19 cases across the city.
+
+The first step in spatial analysis is reading in your spatial data. There are many ways to do this. The first is via **rgdal** 
+
+** readOGR(dsn="PATH TO FILE", layer="ACTUAL FILE (WITH NO EXTENSION)")
+
+For example, if this is my path: "D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/nghbrhd_data.shp"
+
+This is how you read it into R:
+** readOGR(dsn="D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood", layer="nghbrhd_data")
+
+Notice, these won't work:
+** readOGR(dsn="D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/", layer="nghbrhd_data")
+** readOGR(dsn="D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/", layer="nghbrhd_data.shp")
+
+I use the sf package, I find it easier and it is more the more currently accepted way. An example is below.
+
 ```{r mapping libraries}
 library(rgdal)
 library(sf)
@@ -1257,20 +1281,37 @@ library(tmap)
 library(tigris)
 ```
 
-In order to create a boundary of our region, we need to have a shapefile. I have already downloaded a shapefile of the city of LA, and it also contains data on COVID-19 cases across the city.
 
-Open shapefile
+Read in shapefile using **sf**
 ```{r open shapefile}
-lacity_bdry <- st_read("D:/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/nghbrhd_data.shp")%>%
+lacity_bdry <- st_read("/Volumes/Seagate Backup Plus Drive/Barboza Law/COC presentation/Day 2/shapefiles/covid-19 by neighborhood/nghbrhd_data.shp") %>%
   st_transform(4269)
 
 plot(lacity_bdry)
 ```
 
-In order to map the crime data onto the city boundary, we have to first transform it into a map file, which is really easy using the **sf** library in R. Here are the simple steps:
+Recall that we discussed last week that the census tracts can be represented as a network... 
+Below I am going to use what is called a queen contiguity scheme to plot the nearest neighbor census tracts in a network style graph.
+
+```{r la as network}
+#if FALSE, two units are neighbors only if they share a corner and edge (not just an edge)
+continuity.nb <- poly2nb(lacity_bdry, queen = TRUE) 
+# shows how many links each polygon (i.e. CT) has, mean connections=5.2
+summary(continuity.nb) # Average number of links is 4.283465 
+lacity_bdry_SP <- as(lacity_bdry, "Spatial") # from sf to sp
+plot(continuity.nb, coordinates(lacity_bdry_SP))
+
+```
+
+We will get back to this idea of a spatial network below.
+
+In order to map the IPV incidents involving homosexual victims onto the city boundary, it must be transformed it into a map file, which is really easy using the **sf** library in R. Here are the simple steps:
 
 * Convert the data into a point shapefile using the spatial coordinates of the data file
 * Make sure the CRS is the same for the point shapefile and boundary file, as follows:
+
+Note: a coordinate reference system (CRS) refers to the way in which spatial data are flattened so that the points can be drawn on a 2-dimensional surface
+
 ```{r}
 points_sf <- st_as_sf(homosexual_data, coords = c("lon", "lat"))
 st_crs(points_sf) <- st_crs(lacity_bdry)
@@ -1287,7 +1328,6 @@ Cool. There is clearly a cluster near Rampart.
 In this exercise, you will create a spatial point file of all incidents and overlay it onto the shapefile of la city. Since there is more data there is inevitably some data cleaning to do. First, we want to select only valid lat and long values. Look at the data and you will see that there are a number of lat and long with values of 0. Let's remove them.
 
 ```{r}
-#ipv_crime_mo <- ipv_crime_mo[complete.cases(ipv_crime_mo), ] 
 ipv_crime_mo$lon <- as.numeric(as.character(ipv_crime_mo$lon))
 ipv_crime_mo$lat <- as.numeric(as.character(ipv_crime_mo$lat))
 ipv_crime_mo <- ipv_crime_mo %>% filter(lon<0)
@@ -1308,9 +1348,15 @@ plot(lacity_bdry$geometry)
 plot(points_sf$geometry, col = "dark red", lwd = 2, cex = .2, add = TRUE)
 ```
 
+## Chloropleth Mapping
+
+A chloropleth map uses different shades, colors and symbols within predefined areas (e.g census tracts, neighborhoods) to indicate the summary value (e.g average, count, percent) of a property (income, population, crimes) in those areas.
+
+To make a chloropleth map of the crime incidents using the LA neighborhood file, we need to first count the number of points in each neighborhood as follows
+
 ```{r}
 merged_crimes <- st_join(lacity_bdry,points_sf) %>% 
-  dplyr::group_by(COMTY_NAME) %>%                  # group by unique tract ID
+  dplyr::group_by(COMTY_NAME) %>%                  # group by unique neighborhood
   dplyr::mutate(ipv_crimes = n()) %>% 
   dplyr::ungroup() %>% 
   dplyr::select(COMTY_NAME, ipv_crimes, geometry, count) %>% 
@@ -1319,7 +1365,7 @@ merged_crimes <- st_join(lacity_bdry,points_sf) %>%
 ```
 
 ## tmap basics
-tmap is similar to ggmap in that each input dataset can be ‘mapped’ in a range of different ways including location on the map (defined by data’s geometry), color, and other visual variables. The basic building block is tm_shape() (which defines input data, raster and vector objects), followed by one or more layer elements such as tm_fill() and tm_dots(). This layering is demonstrated in the chunk below. 
+tmap is similar to ggmap in that each input dataset can be mapped in a range of different ways including location on the map (defined by data's geometry), color, and other visual variables. The basic building block is tm_shape() (which defines input data, raster and vector objects), followed by one or more layer elements such as tm_fill() and tm_dots(). This layering is demonstrated in the chunk below. 
 
 The object passed to tm_shape() in this case is **merged_crimes**, an sf object representing the the IPV incident counts in census tracts from the city of LA boundary file. Layers are added to represent merged_crimes visually, with tm_fill() and tm_borders() creating shaded areas (left panel) and border outlines 
 ```{r}
@@ -1463,7 +1509,6 @@ la_decennial %>%
 ```
  
 ```{r}
-
 st_crs(la_decennial) <- st_crs(lacity_bdry)
 plot(x_and_y <- st_intersection(la_decennial, lacity_bdry), col = "lightgrey", main="st_intersection")
 ```
@@ -1526,3 +1571,159 @@ tm_shape(denver_county) +
 
 ```
 
+```{r prepare dat}
+library(data.table)
+#Load data and create an ID variable
+child_deaths <- fread("/Volumes/Seagate Backup Plus Drive/Research/LA County/california-coronavirus-data-master/child_deaths_all_0to5_covid.csv")
+child_deaths$ID <- paste0("V", 1:nrow(child_deaths))
+rownames(child_deaths) <- child_deaths$ID
+
+#rename variables
+child_deaths <- plyr::rename(child_deaths, c("x"="lon", "y"="lat"))
+
+#remove empty lat/long locations
+child_deaths <- child_deaths[!is.na(child_deaths$lon), ]
+
+#select lat long only and store into dataframe called 'coords'
+coords = cbind(child_deaths$lon, child_deaths$lat)
+```
+
+```{r}
+library(spdep)
+
+# spDists returns a full matrix of distances in the metric of the points if longlat=FALSE, or in kilometers if longlat=TRUE;
+distance <- spDists(coords, coords, longlat=T)
+
+# scale the distance so it returns miles
+distance <- distance * 0.621371192237
+
+# this makes a matrix of nearest neighbors for each point in the data set
+deaths.nb<-dnearneigh(coords, 0, 5.60934, row.names = child_deaths$ID, longlat = TRUE)
+
+#The nb2listw function supplements a neighbours list with spatial weights for the chosen coding scheme.
+#Here we weight by how many nearest neighbors the point has
+deaths.listw<-nb2listw(deaths.nb, zero.policy=TRUE)
+(w1 = listw2mat(deaths.listw))
+
+```
+```{r datacheck}
+data.frame(deaths.listw$weights[[1]])
+data.frame(deaths.listw$neighbours[[1]])
+(w_p1 <- 1/29)
+```
+
+```{r neighbor to dataframe}
+nb_to_df <- function(nb, coords){
+  x <- coords[, 1]
+  y <- coords[, 2]
+  n <- length(nb)
+  cardnb <- card(nb)
+  i <- rep(1:n, cardnb)
+  j <- unlist(nb)
+  return(data.frame(x=x[i], xend=x[j],
+                    y=y[i], yend=y[j]))
+}
+nb_df <- nb_to_df(deaths.listw$neighbours, coords)
+
+coord_df <- data.frame(coords)
+names(coord_df) <- c("lon", "lat")
+```
+
+```{r add attribute}
+table(child_deaths$causes)
+coord_df$causes<-child_deaths$causes
+coord_df$causes[coord_df$causes=="Gunshot"]<-"Gunshot"
+coord_df$causes[coord_df$causes=="Blunt force"]<-"Blunt force"
+coord_df$causes[coord_df$causes=="Stabbing"]<-"Stabbing"
+coord_df$causes[coord_df$causes=="Other" | coord_df$causes=="Strangled" | coord_df$causes=="Unknown" ]<-NA
+table(coord_df$causes)
+coord_df <- coord_df[!is.na(coord_df$causes), ]
+```
+
+```{r}
+library(ggmap)
+#Get coordinates from https://www.openstreetmap.org/#map=4/38.01/-95.84
+bbox <- c(left=-118.6681776, bottom=33.659541, right=  -118.1552947, top=34.337306)
+
+#bounding box of southwest and northeast coordinates
+la <- get_stamenmap(bbox, zoom = 12, maptype = "toner-lite")
+
+```
+
+```{r}
+ggmap(la, extent = 'device', darken = c(.01, "black")) +
+  theme(
+    legend.key.size = grid::unit(1.8,"lines"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14)) + geom_segment(aes(x=x, xend=xend, y=y, yend=yend), colour="red", size =
+                   .5, data=nb_df) +
+  geom_point(aes(x=lon, y=lat, colour = causes), data=coord_df, size=2.0) +
+  scale_color_manual(values=c("#56B4E9", "#D55E00", "#0000FF"))+
+  ylab("Latitude") +
+  xlab("Longitude") +
+  labs(caption = "Map created using data from the Los Angeles Times Homicide Report") +
+  ggtitle("Identification 3-mile Radius Neighbor Specification")
+
+```
+
+```{r}
+#Our old friend from last week, igraph
+library(igraph)
+w1[w1>0]<-1
+g1<-graph.adjacency(w1)
+
+#layout representing actual space
+plot(g1, vertex.color=ifelse(child_deaths$causes == "Gunshot", "grey10",ifelse(child_deaths$causes == "Blunt force" , "grey47", "grey74")),
+     vertex.label=child_deaths$name, layout=coords, vertex.size=2.5,
+     vertex.label.color="grey23", edge.arrow.size=.1, edge.color="red", vertex.label.cex=.5)
+
+#A different layout
+plot(g1, edge.arrow.size=.2, edge.color="red",
+     vertex.color="orange", vertex.frame.color="#ffffff",vertex.size=2.5,
+     vertex.label=child_deaths$name, vertex.label.color="navy", vertex.label.cex=.5) 
+```
+```{r}
+###K-neighbor approach
+deaths.nb<-knn2nb(knearneigh(coords,k=1))
+deaths.listw1c<-nb2listw(deaths.nb)
+
+w1c = listw2mat(deaths.listw1c)
+
+w1c
+nb_df <- nb_to_df(deaths.listw1c$neighbours, coords)
+```
+
+```{r}
+ggmap(la, extent = 'device', darken = c(.01, "black")) +
+  theme(
+    legend.key.size = grid::unit(1.8,"lines"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14)) + geom_segment(aes(x=x, xend=xend, y=y, yend=yend), colour="red", size = .5, data=nb_df) + 
+  geom_segment(aes(x=x, xend=xend, y=y, yend=yend), colour="red", size = .8, data=nb_df) +
+  geom_point(aes(x=lon, y=lat, colour = causes), data=coord_df, size=1.8) +
+  scale_color_manual(values=c("#56B4E9", "#D55E00", "#0000FF"))+
+  ylab("Latitude") +
+  xlab("Longitude") +
+  labs(caption = "Map created using data from the Los Angeles Times Homicide Report") +
+  ggtitle("Identification with Closest Neighbor Specification")
+```
+
+```{r}
+#Network representation
+w1c[w1c>0]<-1
+g1c<-graph.adjacency(w1c)
+#Sociogram shown in Figure 4(d)
+
+plot(g1c, vertex.color=ifelse(child_deaths$causes =="Gunshot", "red", "green"),
+     vertex.label= NA, layout=coords, vertex.size=1.8,
+     vertex.label.color="grey23", edge.arrow.size=.2, edge.color="grey23")
+
+
+
+```
+
+## Dashboards
+
+install.packages("flexdashboard", type = "source")
+
+From the file menu File --> New File --> R Markdown
